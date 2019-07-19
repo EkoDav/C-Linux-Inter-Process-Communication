@@ -1,6 +1,6 @@
 /* 
  * mypipe.c written by Erik Davis
- * CS431 - Assignment 2 Part II, April 12, 2019
+ * April 12, 2019
  * 
  * A simple program to perform a fork() system call and 
  * demonstrate message passing between a parent and child process
