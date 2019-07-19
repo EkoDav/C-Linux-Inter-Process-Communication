@@ -1,0 +1,115 @@
+/* 
+ * mypipe.c written by Erik Davis
+ * CS431 - Assignment 2 Part II, April 12, 2019
+ * 
+ * A simple program to perform a fork() system call and 
+ * demonstrate message passing between a parent and child process
+ * using a pipe. 
+ */
+ 
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <signal.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+
+char send_message[] = "Hello World!"; //String length limited by BUFF_SIZE
+const int SLEEP_TIME = 3;  // The parent sleep time
+int SIGNAL_INDICATOR = 0;  // Indicates when a signal is received via handler
+const int BUFF_SIZE = 50;  // Read buffer size, changable for bigger messages
+
+void handler(int sig_num); 
+
+int main() {
+	int wrote_bytes = 0;
+	int read_bytes = 0;
+	
+	//Create a pipe
+	int pipefd[2];
+	if (pipe(pipefd) == -1) {
+		printf("ERR: Unable to create pipe: %s\n", strerror(errno));
+	}
+ 	
+	// Create a child process using fork. Change flow based on parent or child
+	printf("\nCreating a child process...\n\n");
+	int pID = fork();
+ 	
+	switch (pID) {
+		case -1 :
+			// The fork was unsuccessful
+			printf("ERR: Unable to create child process: %s\n", strerror(errno));
+			exit(1);
+			break;
+		case 0 : {
+			char buff[BUFF_SIZE];
+			// Child process, check for signal every 1 second
+			while (SIGNAL_INDICATOR != 1) {
+				sleep(1);
+				if (signal(SIGUSR1, handler) == SIG_ERR) {
+					printf("ERR: Unable to register signal handler: %s\n", 
+						strerror(errno));
+					exit(1);
+				}
+			}
+			printf("Child: Received SIGUSR1 successfully!\n\n");
+			
+			// Read from pipe
+			close(pipefd[1]);
+			read_bytes = read(pipefd[0], buff, BUFF_SIZE);
+			
+			if (read_bytes < 0) {
+				printf("ERR: Read from the pipe failed: %s\n", strerror(errno));
+				exit(1);
+			} 
+			
+			printf("Child: Successfully read the string \"%s\" from the pipe.\n"
+				"\t A total of %d bytes were read.\n\n", buff, read_bytes);
+				
+			_exit(0);
+			break;
+		}
+		default :
+			// Parent process. Write to pipe
+			printf("Parent Process pID is %d\n", getpid());
+			printf("Child Process pID is %d\n\n", pID);
+			
+			close(pipefd[0]);
+			wrote_bytes = write(pipefd[1], send_message, 
+				strlen(send_message) + 1);
+			close(pipefd[1]);
+			
+			if (wrote_bytes < 0) {
+				printf("ERR: Write to the pipe failed: %s\n", strerror(errno));
+				exit(1);
+			}
+			
+			printf("Parent: Successfully wrote the string \"%s\" to the pipe.\n" 
+				"\t A total of %d bytes were written.\n\n", send_message, 
+				wrote_bytes); 
+			
+			// Sleep then send signal to child
+			printf("Parent: Sleeping for %d seconds...\n\n", SLEEP_TIME);
+			sleep(SLEEP_TIME);
+			
+			if (kill(pID, SIGUSR1) == -1) {
+				printf("ERR: Unable to send signal to child: %s\n", 
+					strerror(errno));
+				exit(1);
+			}
+			printf("Parent: Sent SIGUSR1 signal to child process (pid: %d)\n", 
+				pID);
+			wait(NULL); 
+	}
+ 	return 0;
+ }
+ 
+ // Handler for receiving a signal
+ void handler(int sig_num) {
+ 	if (sig_num == SIGUSR1) {
+ 		SIGNAL_INDICATOR = 1; 
+ 	}
+ }
